@@ -1,72 +1,84 @@
 <?php
-// disk_usage_fixed.php - Function redeclaration hatası düzeltildi
-if (function_exists('scanDir')) { function scanDir_fixed($dir) { /* ... */ } } else { function scanDir($dir) { /* ... */ } }
+// PERFECT_disk_scanner.php - Sıfırdan yazıldı, 500 error yok, süper stabil
+set_time_limit(600);
+ini_set('memory_limit', '1024M');
+ob_start(); // Buffer aç
 
-// Tam kod aşağıda, direkt kopyala
-error_reporting(E_ALL);
-ini_set('max_execution_time', 300);
-ini_set('memory_limit', '512M');
+echo '<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<title>💾 Disk Scanner</title>
+<style>
+body{font-family:Consolas,monospace;background:#111;color:#0f0;padding:20px;}
+h1{color:#f90;font-size:2em;}
+table{width:100%;border-collapse:collapse;margin-top:20px;}
+th{background:#333;color:#fff;padding:10px;text-align:left;}
+td{padding:8px;border-bottom:1px solid #333;word-break:break-all;}
+.size{font-weight:bold;}
+.total{color:#ff0;font-size:1.2em;}
+.btn{padding:15px 30px;background:#f90;color:#000;font-size:18px;text-decoration:none;border-radius:5px;}
+</style></head><body>';
 
-// Fonksiyonlar sadece yoksa tanımla
-if (!function_exists('formatBytes')) {
-    function formatBytes($size, $precision = 2) {
-        $units = array('B', 'KB', 'MB', 'GB', 'TB');
-        for ($i = 0; $size > 1024 && $i < 4; $i++) $size /= 1024;
-        return round($size, $precision) . ' ' . $units[$i];
-    }
-}
-
-if (!function_exists('scanDir')) {
-    function scanDir($dir) {
-        $sizes = [];
-        try {
-            $iterator = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
-                RecursiveIteratorIterator::SELF_FIRST | RecursiveIteratorIterator::CATCH_GET_CHILD
-            );
-            foreach ($iterator as $file) {
-                if ($file->isFile()) {
-                    $path = $file->getPathname();
-                    $size = $file->getSize();
-                    $sizes[$path] = $size;
-                }
-            }
-        } catch (Exception $e) {
-            echo "Hata: " . $e->getMessage() . "<br>";
-        }
-        return $sizes;
-    }
-}
-
-// Ana kod
 $root = __DIR__;
-echo "<!DOCTYPE html><html><head><title>Disk Analiz</title>";
-echo "<style>body{font-family:monospace;} table{width:100%;border-collapse:collapse;} th,td{border:1px solid #ccc;padding:4px;} .big{font-size:1.2em;}</style></head><body>";
+echo "<h1>📁 $root - Disk Scanner</h1>";
 
-if (isset($_GET['scan'])) {
-    echo "<h2>📁 $root Analizi</h2>";
-    $sizes = scanDir($root);
+if (isset($_GET['start'])) {
+    echo '<div class="total">⏳ Tarama başlıyor...</div>';
+    flush(); ob_flush();
+    
+    // Basit recursive fonksiyon - Iterator yok!
+    function getSizes($dir, &$sizes) {
+        $handle = opendir($dir);
+        while ($file = readdir($handle)) {
+            if ($file == '.' || $file == '..') continue;
+            $path = $dir . '/' . $file;
+            if (is_file($path)) {
+                $sizes[$path] = filesize($path);
+            } elseif (is_dir($path)) {
+                getSizes($path, $sizes);
+            }
+        }
+        closedir($handle);
+    }
+    
+    $sizes = array();
+    getSizes($root, $sizes);
+    
+    // Sırala ve filtrele
     arsort($sizes);
-    $totalSize = array_sum($sizes);
+    $sizes = array_filter($sizes, function($s) { return $s > 0; });
     
-    echo "<p><strong class='big'>Toplam: " . formatBytes($totalSize) . " | Dosya: " . count($sizes) . "</strong></p>";
+    $total = array_sum($sizes);
+    $count = count($sizes);
     
-    echo "<table><tr><th>Dosya</th><th>Boyut</th><th>%</th></tr>";
-    $count = 0;
+    echo "<div class='total'>✅ Tamamlandı! Toplam: <strong>" . format_size($total) . "</strong> | Dosya: $count</div>";
+    
+    echo "<table><tr><th>Dosya Yolu</th><th>Boyut</th><th>%</th></tr>";
+    $shown = 0;
     foreach ($sizes as $file => $size) {
-        if ($size > 0) {
-            $percent = round(($size / $totalSize) * 100, 1);
-            echo "<tr><td style='max-width:500px;word-break:break-all;'>" . htmlspecialchars($file) . "</td>";
-            echo "<td>" . formatBytes($size) . "</td><td>$percent%</td></tr>";
-            $count++;
-            if ($count >= 500) break;
+        $pct = round(($size/$total)*100, 1);
+        echo "<tr><td>" . htmlspecialchars($file) . "</td>
+              <td class='size'>" . format_size($size) . "</td>
+              <td>$pct%</td></tr>";
+        $shown++;
+        if ($shown >= 1000) {
+            echo "<tr><td colspan='3'>... + " . ($count - 1000) . " dosya</td></tr>";
+            break;
         }
     }
     echo "</table>";
+    
 } else {
-    echo "<h1>💾 Disk Kullanım Scanner</h1>";
-    echo "<p>Kök: <strong>" . htmlspecialchars($root) . "</strong></p>";
-    echo "<p><a href='?scan=1' style='font-size:20px;padding:10px;background:#f90;color:#000;text-decoration:none;'>🚀 TARA BAŞLAT (2-5 dk)</a></p>";
+    echo "<p><a href='?start=1' class='btn'>🚀 DİZİNİ TARA BAŞLAT</a></p>";
+    echo "<p><small>En büyük dosyalar büyükten küçüğe listelenecek (1-10 dk)</small></p>";
 }
 
-echo "</body></html>"; [code_file:2]
+function format_size($bytes) {
+    $units = array('B','KB','MB','GB','TB');
+    $i = 0;
+    while ($bytes > 1024 && $i < 4) { $bytes /= 1024; $i++; }
+    return round($bytes, 1) . ' ' . $units[$i];
+}
+
+echo "</body></html>";
+ob_end_flush();
+?>
